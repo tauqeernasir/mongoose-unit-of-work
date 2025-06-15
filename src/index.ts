@@ -45,9 +45,21 @@ class DefaultLogger implements ILogger {
   }
 }
 
+const DEFAULT_SESSION_OPTIONS: ClientSession["defaultTransactionOptions"] = {
+  readConcern: "snapshot",
+  writeConcern: {
+    w: "majority",
+    wtimeout: 3000,
+  },
+  readPreference: "primary",
+};
+
 export class UnitOfWork {
   private connection: Connection;
   private session: ClientSession | null = null;
+  private transactionOptions:
+    | ClientSession["defaultTransactionOptions"]
+    | null = null;
   protected logger: ILogger;
 
   constructor(connection: Connection, logger?: ILogger) {
@@ -62,7 +74,10 @@ export class UnitOfWork {
     }
 
     this.logger.debug("Starting new transaction session");
-    this.session = await this.connection.startSession();
+    this.session = await this.connection.startSession({
+      defaultTransactionOptions:
+        this.transactionOptions || DEFAULT_SESSION_OPTIONS,
+    });
     this.session.startTransaction();
     return this;
   }
