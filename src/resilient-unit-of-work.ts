@@ -1,5 +1,5 @@
-import { Connection } from "mongoose";
-import { DEFAULT_RETRY_OPTIONS } from "./constants";
+import { ClientSession, Connection } from "mongoose";
+import { DEFAULT_RETRY_OPTIONS, DEFAULT_SESSION_OPTIONS } from "./constants";
 import { ILogger, RetryOptions, TransactionFunction } from "./interfaces";
 import { UnitOfWork } from "./unit-of-work";
 
@@ -8,11 +8,25 @@ export class ResilientUnitOfWork extends UnitOfWork {
 
   constructor(
     connection: Connection,
-    retryOptions?: Partial<RetryOptions>,
-    logger?: ILogger
+    options?: {
+      retryOptions?: Partial<RetryOptions>;
+      logger?: ILogger;
+      transactionOptions?: ClientSession["defaultTransactionOptions"];
+    }
   ) {
-    super(connection, logger);
-    this.retryOptions = { ...DEFAULT_RETRY_OPTIONS, ...retryOptions };
+    const transactionOptions = {
+      ...DEFAULT_SESSION_OPTIONS,
+      ...options?.transactionOptions,
+    };
+
+    super(connection, {
+      logger: options?.logger,
+      transactionOptions,
+    });
+    this.retryOptions = {
+      ...DEFAULT_RETRY_OPTIONS,
+      ...options?.retryOptions,
+    };
   }
 
   private async delay(ms: number): Promise<void> {

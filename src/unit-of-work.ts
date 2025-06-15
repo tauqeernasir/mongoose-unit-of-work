@@ -6,14 +6,22 @@ import { ILogger, TransactionFunction } from "./interfaces";
 export class UnitOfWork {
   private connection: Connection;
   private session: ClientSession | null = null;
-  private transactionOptions:
-    | ClientSession["defaultTransactionOptions"]
-    | null = null;
+  private transactionOptions: ClientSession["defaultTransactionOptions"];
   protected logger: ILogger;
 
-  constructor(connection: Connection, logger?: ILogger) {
+  constructor(
+    connection: Connection,
+    options?: {
+      transactionOptions?: ClientSession["defaultTransactionOptions"];
+      logger?: ILogger;
+    }
+  ) {
     this.connection = connection || mongoose.connection;
-    this.logger = logger || new DefaultLogger();
+    this.logger = options?.logger || new DefaultLogger();
+    this.transactionOptions = {
+      ...DEFAULT_SESSION_OPTIONS,
+      ...options?.transactionOptions,
+    };
   }
 
   async begin(): Promise<UnitOfWork> {
@@ -24,8 +32,7 @@ export class UnitOfWork {
 
     this.logger.debug("Starting new transaction session");
     this.session = await this.connection.startSession({
-      defaultTransactionOptions:
-        this.transactionOptions || DEFAULT_SESSION_OPTIONS,
+      defaultTransactionOptions: this.transactionOptions,
     });
     this.session.startTransaction();
     return this;
