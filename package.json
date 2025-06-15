@@ -1,0 +1,37 @@
+{
+  "name": "mongoose-unit-of-work",
+  "description": "A unit of work implementation for mongoose",
+  "version": "0.0.1",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=14"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "dev": "tsup src/index.ts --format esm,cjs --dts --clean --watch",
+    "prepublishOnly": "yarn run build"
+  },
+  "keywords": [
+    "mongoose",
+    "unit-of-work",
+    "transaction"
+  ],
+  "author": "Tauqeer Nasir",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tauqeernasir/mongoose-unit-of-work"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "mongoose": "^8.15.2"
+  }
+}
