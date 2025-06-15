@@ -23,19 +23,45 @@ const DEFAULT_RETRY_OPTIONS: RetryOptions = {
   ],
 };
 
+interface ILogger {
+  debug(message: string, ...args: any[]): void;
+  info(message: string, ...args: any[]): void;
+  warn(message: string, ...args: any[]): void;
+  error(message: string, ...args: any[]): void;
+}
+
+class DefaultLogger implements ILogger {
+  debug(message: string, ...args: any[]): void {
+    console.debug(message, ...args);
+  }
+  info(message: string, ...args: any[]): void {
+    console.info(message, ...args);
+  }
+  warn(message: string, ...args: any[]): void {
+    console.warn(message, ...args);
+  }
+  error(message: string, ...args: any[]): void {
+    console.error(message, ...args);
+  }
+}
+
 export class UnitOfWork {
   private connection: Connection;
   private session: ClientSession | null = null;
+  protected logger: ILogger;
 
-  constructor(connection: Connection) {
+  constructor(connection: Connection, logger?: ILogger) {
     this.connection = connection || mongoose.connection;
+    this.logger = logger || new DefaultLogger();
   }
 
   async begin(): Promise<UnitOfWork> {
     if (this.session) {
+      this.logger.warn("A session is already active");
       throw new Error("A session is already active");
     }
 
+    this.logger.debug("Starting new transaction session");
     this.session = await this.connection.startSession();
     this.session.startTransaction();
     return this;
@@ -50,13 +76,16 @@ export class UnitOfWork {
 
   async execute<T>(transactionFn: TransactionFunction<T>): Promise<T> {
     if (!this.session) {
+      this.logger.warn("No active transaction. Call begin() first.");
       throw new Error("No active transaction. Call begin() first.");
     }
 
     try {
+      this.logger.debug("Executing transaction function");
       const result = await transactionFn(this.session, this);
       return result;
     } catch (error) {
+      this.logger.error("Error executing transaction", error);
       throw error;
     }
   }
@@ -67,8 +96,11 @@ export class UnitOfWork {
     }
 
     try {
+      this.logger.debug("Committing transaction");
       await this.session.commitTransaction();
+      this.logger.info("Transaction committed successfully");
     } catch (error) {
+      this.logger.error("Error committing transaction", error);
       await this.abort();
       throw error;
     }
@@ -80,9 +112,11 @@ export class UnitOfWork {
     }
 
     try {
+      this.logger.debug("Aborting transaction");
       await this.session.abortTransaction();
+      this.logger.info("Transaction aborted successfully");
     } catch (error) {
-      //
+      this.logger.error("Error aborting transaction", error);
     }
   }
 
@@ -91,6 +125,7 @@ export class UnitOfWork {
       return;
     }
 
+    this.logger.debug("Disposing transaction session");
     await this.session.endSession();
     this.session = null;
   }
@@ -105,11 +140,14 @@ export class UnitOfWork {
     transactionFn: TransactionFunction<T>
   ): Promise<T> {
     try {
+      this.logger.debug("Starting transaction execution");
       await this.begin();
       const result = await this.execute(transactionFn);
       await this.commit();
+      this.logger.info("Transaction executed successfully");
       return result;
     } catch (error) {
+      this.logger.error("Transaction execution failed", error);
       await this.abort();
       throw error;
     } finally {
@@ -121,8 +159,12 @@ export class UnitOfWork {
 export class ResilientUnitOfWork extends UnitOfWork {
   private retryOptions: RetryOptions;
 
-  constructor(connection: Connection, retryOptions?: Partial<RetryOptions>) {
-    super(connection);
+  constructor(
+    connection: Connection,
+    retryOptions?: Partial<RetryOptions>,
+    logger?: ILogger
+  ) {
+    super(connection, logger);
     this.retryOptions = { ...DEFAULT_RETRY_OPTIONS, ...retryOptions };
   }
 
@@ -154,6 +196,11 @@ export class ResilientUnitOfWork extends UnitOfWork {
 
     for (let attempt = 0; attempt <= this.retryOptions.maxRetries; attempt++) {
       try {
+        if (attempt > 0) {
+          this.logger.info(
+            `Retry attempt ${attempt} of ${this.retryOptions.maxRetries}`
+          );
+        }
         return await super.executeTransaction(transactionFn);
       } catch (error) {
         lastError = error;
@@ -162,10 +209,19 @@ export class ResilientUnitOfWork extends UnitOfWork {
           attempt === this.retryOptions.maxRetries ||
           !this.isRetryableError(error)
         ) {
+          this.logger.error(`Transaction failed after ${attempt} retries`, {
+            error,
+            maxRetries: this.retryOptions.maxRetries,
+          });
           throw error;
         }
 
         const delayMs = this.calculateBackoffDelay(attempt);
+        this.logger.warn(`Retryable error occurred, retrying in ${delayMs}ms`, {
+          error,
+          attempt,
+          nextAttempt: attempt + 1,
+        });
         await this.delay(delayMs);
       }
     }
