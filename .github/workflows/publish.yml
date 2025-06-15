@@ -1,0 +1,42 @@
+name: Publish Package
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Check version in commit message
+        id: check_version
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if [[ $COMMIT_MSG =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "version=$COMMIT_MSG" >> $GITHUB_OUTPUT
+            echo "is_version=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_version=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build
+        if: steps.check_version.outputs.is_version == 'true'
+        run: yarn build
+
+      - name: Publish to NPM
+        if: steps.check_version.outputs.is_version == 'true'
+        run: yarn publish --new-version ${{ steps.check_version.outputs.version }} --no-git-tag-version
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
