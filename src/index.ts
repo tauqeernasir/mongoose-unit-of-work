@@ -4,6 +4,25 @@ interface TransactionFunction<T = any> {
   (session: ClientSession, uow: UnitOfWork): Promise<T>;
 }
 
+interface RetryOptions {
+  maxRetries: number; // Maximum number of retry attempts
+  initialDelayMs: number; // Initial delay between retries in milliseconds
+  maxDelayMs: number; // Maximum delay cap in milliseconds
+  backoffFactor: number; // Multiplier for exponential backoff
+  retryableErrors?: string[]; // List of error types to retry on
+}
+
+const DEFAULT_RETRY_OPTIONS: RetryOptions = {
+  maxRetries: 3,
+  initialDelayMs: 100,
+  maxDelayMs: 1000,
+  backoffFactor: 2,
+  retryableErrors: [
+    "TransientTransactionError",
+    "UnknownTransactionCommitResult",
+  ],
+};
+
 export class UnitOfWork {
   private connection: Connection;
   private session: ClientSession | null = null;
@@ -96,5 +115,61 @@ export class UnitOfWork {
     } finally {
       await this.dispose();
     }
+  }
+}
+
+export class ResilientUnitOfWork extends UnitOfWork {
+  private retryOptions: RetryOptions;
+
+  constructor(connection: Connection, retryOptions?: Partial<RetryOptions>) {
+    super(connection);
+    this.retryOptions = { ...DEFAULT_RETRY_OPTIONS, ...retryOptions };
+  }
+
+  private async delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isRetryableError(error: any): boolean {
+    if (!this.retryOptions.retryableErrors) return false;
+    return this.retryOptions.retryableErrors.some(
+      (errorType) =>
+        error.name === errorType || error.message?.includes(errorType)
+    );
+  }
+
+  private calculateBackoffDelay(retryCount: number): number {
+    const delay = Math.min(
+      this.retryOptions.initialDelayMs *
+        Math.pow(this.retryOptions.backoffFactor, retryCount),
+      this.retryOptions.maxDelayMs
+    );
+    return delay;
+  }
+
+  async executeTransaction<T>(
+    transactionFn: TransactionFunction<T>
+  ): Promise<T> {
+    let lastError: any;
+
+    for (let attempt = 0; attempt <= this.retryOptions.maxRetries; attempt++) {
+      try {
+        return await super.executeTransaction(transactionFn);
+      } catch (error) {
+        lastError = error;
+
+        if (
+          attempt === this.retryOptions.maxRetries ||
+          !this.isRetryableError(error)
+        ) {
+          throw error;
+        }
+
+        const delayMs = this.calculateBackoffDelay(attempt);
+        await this.delay(delayMs);
+      }
+    }
+
+    throw lastError;
   }
 }
