@@ -2,6 +2,13 @@
 
 A lightweight implementation of the Unit of Work pattern for Mongoose transactions with support for resilient transactions and logging.
 
+[![CodeQL](https://github.com/tauqeernasir/mongoose-unit-of-work/actions/workflows/codeql.yml/badge.svg)](https://github.com/tauqeernasir/mongoose-unit-of-work/actions/workflows/codeql.yml)
+[![Publish Package](https://github.com/tauqeernasir/mongoose-unit-of-work/actions/workflows/publish.yml/badge.svg)](https://github.com/tauqeernasir/mongoose-unit-of-work/actions/workflows/publish.yml)
+[![npm version](https://badge.fury.io/js/mongoose-unit-of-work.svg)](https://badge.fury.io/js/mongoose-unit-of-work)
+[![Downloads](https://img.shields.io/npm/dm/mongoose-unit-of-work.svg)](https://npmjs.org/package/mongoose-unit-of-work)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D14-brightgreen.svg)](https://nodejs.org/)
+
 ## Installation
 
 ```bash
